@@ -177,6 +177,107 @@ sudo ufw enable
 
 ---
 
+---
+
+## 🔀 Script complementario: Nginx Reverse Proxy
+
+> **Requisito:** ejecutar **después** de `install_mattermost.sh` con Mattermost corriendo.
+
+### ⚡ Uso
+```bash
+chmod +x install_nginx_proxy.sh
+sudo bash install_nginx_proxy.sh
+```
+
+### 🖥️ Modos de interfaz
+
+Igual que el instalador principal, detecta el entorno automáticamente:
+
+| Modo | Cuándo se activa |
+|------|-----------------|
+| **TUI gráfico** (whiptail) | Terminal interactiva con `whiptail` disponible |
+| **Texto ASCII** | SSH sin TTY, CI/CD, o sin `whiptail` |
+
+En ambos modos se solicita:
+1. **Dominio o IP pública** (detecta la IP local como valor por defecto)
+2. **¿Habilitar HTTPS?**
+3. **Método de certificado** si se elige SSL
+
+### 📦 Qué hace el script
+
+| Paso | Acción |
+|------|--------|
+| 1 | Instala `nginx` desde repositorios oficiales |
+| 2 | Genera `/etc/nginx/sites-available/mattermost` con soporte WebSocket |
+| 3 | Aplica tuning de rendimiento en `nginx.conf` |
+| 4 | Obtiene certificado SSL con Certbot (Let's Encrypt) si se seleccionó |
+| 5 | Configura firewall `ufw`: abre 80/443, restringe 8065 |
+| 6 | Recarga Nginx y verifica acceso |
+
+### 🔐 Opciones SSL
+
+**Let's Encrypt (Certbot)** — recomendado para producción con dominio real:
+- Certificado gratuito, válido 90 días
+- Renovación automática configurada en cron (`03:00` diario)
+- Requiere que el dominio resuelva a la IP del servidor y el puerto 80 esté abierto
+
+**Certificado manual** — para entornos corporativos o desarrollo:
+- Proporciona las rutas al `.crt` y `.key` durante la configuración
+- El script no valida ni gestiona la renovación
+
+**Sin SSL** — solo HTTP:
+- Válido para entornos internos o de prueba
+- Mattermost sigue corriendo en `:8065` pero se sirve vía Nginx en `:80`
+
+### 📁 Archivos generados
+```
+/etc/nginx/
+├── sites-available/
+│   └── mattermost          ← Configuración del proxy
+└── sites-enabled/
+    └── mattermost → ...    ← Enlace simbólico (default eliminado)
+
+/var/log/
+└── mattermost_nginx.log    ← Log de la instalación del proxy
+```
+
+### 🔧 Gestión de Nginx
+```bash
+# Validar configuración
+sudo nginx -t
+
+# Recargar sin cortar conexiones
+sudo systemctl reload nginx
+
+# Logs de acceso y errores
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
+
+# Estado
+sudo systemctl status nginx
+```
+
+### 🔍 Diagnóstico de errores
+
+| Síntoma | Causa probable | Solución |
+|---------|---------------|----------|
+| `nginx -t` falla | Error de sintaxis en config | Revisa `/var/log/mattermost_nginx.log` |
+| 502 Bad Gateway | Mattermost no responde en :8065 | `sudo systemctl status mattermost` |
+| Certbot falla | DNS no resuelve / puerto 80 cerrado | Verifica DNS y `ufw allow 80/tcp` |
+| WebSocket desconecta | Timeout demasiado bajo | `proxy_read_timeout` está en 600s por defecto |
+| HTTPS no carga | Certificado no emitido aún | Ejecuta `sudo certbot --nginx -d tudominio.com` |
+
+### 🌐 Acceso tras la configuración
+
+| Modo | URL de acceso |
+|------|--------------|
+| Solo HTTP | `http://tudominio.com` o `http://<IP>` |
+| HTTPS | `https://tudominio.com` (HTTP redirige automáticamente) |
+
+> Una vez configurado Nginx, el acceso directo por `:8065` sigue funcionando
+> internamente. Para bloquearlo desde el exterior, el script añade
+> `ufw deny 8065/tcp` automáticamente.
+
 ## 📄 Licencia
 
 Script de automatización de referencia.  
