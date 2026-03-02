@@ -177,8 +177,6 @@ sudo ufw enable
 
 ---
 
----
-
 ## 🔀 Script complementario: Nginx Reverse Proxy
 
 > **Requisito:** ejecutar **después** de `install_mattermost.sh` con Mattermost corriendo.
